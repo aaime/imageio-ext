@@ -6,6 +6,7 @@ import it.geosolutions.imageio.pam.PAMDataset.PAMRasterBand.Metadata.MDI;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -59,6 +60,16 @@ public class PAMParser {
         return pamDataset;
     }
 
+    public PAMDataset parsePAM(final InputStream is) throws IOException {
+        PAMDataset pamDataset;
+        try {
+            pamDataset = unmarshal(is);
+        } catch (JAXBException e) {
+            throw new IOException("Exception occurred while parsing the file", e);
+        }
+        return pamDataset;
+    }
+
     /**
      * Unmarshal the file and return and PAMDataset object.
      * 
@@ -72,6 +83,23 @@ public class PAMParser {
         if (pamFile != null) {
             unmarshaller = CONTEXT.createUnmarshaller();
             pamDataset = (PAMDataset) unmarshaller.unmarshal(pamFile);
+        }
+        return pamDataset;
+    }
+
+    /**
+     * Unmarshal the file and return and PAMDataset object.
+     *
+     * @param pamFile
+     * @return
+     * @throws JAXBException
+     */
+    private PAMDataset unmarshal(final InputStream is) throws JAXBException {
+        Unmarshaller unmarshaller = null;
+        PAMDataset  pamDataset = null;
+        if (is != null) {
+            unmarshaller = CONTEXT.createUnmarshaller();
+            pamDataset = (PAMDataset) unmarshaller.unmarshal(is);
         }
         return pamDataset;
     }

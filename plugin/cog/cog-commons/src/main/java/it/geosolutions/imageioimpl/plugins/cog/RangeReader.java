@@ -16,6 +16,9 @@
  */
 package it.geosolutions.imageioimpl.plugins.cog;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
 import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URL;
@@ -84,4 +87,17 @@ public interface RangeReader {
      * @return They byte data of the header
      */
     byte[] fetchHeader();
+
+    public interface StreamConsumer<T> {
+        T consume(InputStream is) throws IOException;
+    }
+
+    /**
+     * Allows consuming a plan stream rather than performing range reads
+     */
+    default <T> T consumeInputStream(StreamConsumer<T> consumer) throws IOException {
+        throw new UnsupportedOperationException();
+    }
+
+
 }

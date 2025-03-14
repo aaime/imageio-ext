@@ -20,6 +20,7 @@ import it.geosolutions.imageio.core.BasicAuthURI;
 import okhttp3.*;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.URL;
 import java.time.Duration;
@@ -79,7 +80,7 @@ public class HttpRangeReader extends AbstractRangeReader {
         if (currentHeader != null) {
             return currentHeader;
         }
-        Request request = buildRequest(new long[]{headerOffset, (headerOffset + headerLength - 1)}, null);
+        Request request = buildRequest(new long[]{headerOffset, headerLength < 0 ? -1 : (headerOffset + headerLength - 1)}, null);
 
         try (Response response = client.newCall(request).execute()) {
             if (!response.isSuccessful()) {
@@ -233,4 +234,32 @@ public class HttpRangeReader extends AbstractRangeReader {
         return requestBuilder.build();
     }
 
+    @Override
+    public <T> T consumeInputStream(StreamConsumer<T> consumer) throws IOException {
+        Request.Builder requestBuilder = new Request.Builder().url(uri.toString());
+        if (credentials != null) {
+            requestBuilder.header("Authorization", credentials);
+        }
+
+        Request request = requestBuilder.build();
+
+        try(Response response = client.newCall(request).execute()) {
+            if (!response.isSuccessful()) {
+
+                String msg = "Unable to read header for " + uri + ". "
+                        + "Code: " + response.code() + ". Reason: " + response.message();
+                response.close();
+                throw new IOException(msg);
+            }
+            try (ResponseBody body = response.body()) {
+                if (body == null) {
+                    response.close();
+                    return null;
+                }
+                try (InputStream is = body.byteStream()) {
+                    return consumer.consume(is);
+                }
+            }
+        }
+    }
 }

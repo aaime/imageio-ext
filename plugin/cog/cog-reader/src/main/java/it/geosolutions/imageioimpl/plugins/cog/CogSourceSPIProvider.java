@@ -17,6 +17,7 @@
 package it.geosolutions.imageioimpl.plugins.cog;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -95,6 +96,17 @@ public class CogSourceSPIProvider extends SourceSPIProvider {
         if (rangeReader == null) return null;
         inStream.init(rangeReader);
         return inStream;
+    }
+
+    public <T> T consumeInputStream(RangeReader.StreamConsumer<T> consumer) throws IOException {
+        BasicAuthURI uri = getCogUri();
+        CogImageInputStream inStream =
+                (CogImageInputStream)
+                        getStreamSpi()
+                                .createInputStreamInstance(uri, uri.isUseCache(), null);
+        RangeReader rangeReader = createRangeReaderInstance(rangeReaderClassname, uri, -1);
+        if (rangeReader == null) return null;
+        return rangeReader.consumeInputStream(consumer);
     }
 
     /**
