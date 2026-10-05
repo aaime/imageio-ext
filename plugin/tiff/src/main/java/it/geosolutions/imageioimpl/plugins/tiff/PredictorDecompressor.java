@@ -30,13 +30,27 @@
 package it.geosolutions.imageioimpl.plugins.tiff;
 
 import it.geosolutions.imageio.plugins.tiff.BaselineTIFFTagSet;
-import it.geosolutions.imageio.plugins.tiff.TIFFDecompressor;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.VarHandle;
 import java.nio.ByteOrder;
-import java.util.Arrays;
 import javax.imageio.IIOException;
 
 /** Class applying the Predictor algorithm to restore the data from its compressed form. */
 public class PredictorDecompressor {
+
+    /**
+     * Read and write a whole sample at any offset of a byte[]. The JIT turns each access into one load or store of the
+     * sample size, where reading byte by byte takes one per byte. They use the native byte order: {@link #swap} tells
+     * when the file uses the other one.
+     */
+    private static final VarHandle SHORT_VIEW =
+            MethodHandles.byteArrayViewVarHandle(short[].class, ByteOrder.nativeOrder());
+
+    private static final VarHandle INT_VIEW =
+            MethodHandles.byteArrayViewVarHandle(int[].class, ByteOrder.nativeOrder());
+
+    private static final VarHandle LONG_VIEW =
+            MethodHandles.byteArrayViewVarHandle(long[].class, ByteOrder.nativeOrder());
 
     /** predictor's type */
     private final int predictor;
@@ -46,6 +60,9 @@ public class PredictorDecompressor {
     private int samplesPerPixel;
     private ByteOrder byteOrder;
 
+    /** True when the file byte order is not the native one, so samples read through the views need reversing. */
+    private final boolean swap;
+
     public PredictorDecompressor(
             int predictor, int[] bitsPerSample, int[] sampleFormat, int samplesPerPixel, ByteOrder byteOrder) {
         this.predictor = predictor;
@@ -53,6 +70,7 @@ public class PredictorDecompressor {
         this.sampleFormat = sampleFormat;
         this.samplesPerPixel = samplesPerPixel;
         this.byteOrder = byteOrder;
+        this.swap = byteOrder != ByteOrder.nativeOrder();
     }
 
     /** Decompress the buffer content by applying the proper predictor algorithm */
@@ -60,138 +78,15 @@ public class PredictorDecompressor {
             throws IIOException {
         if (predictor == BaselineTIFFTagSet.PREDICTOR_HORIZONTAL_DIFFERENCING) {
             if (bitsPerSample[0] == 8) {
-                if (samplesPerPixel == 1) {
-                    reverseDifferencing(buf, bufOffset, srcHeight, srcWidth, samplesPerPixel);
-                } else {
-                    reverseDifferencingInterleaved(
-                            buf, bufOffset, srcHeight, srcWidth * samplesPerPixel, samplesPerPixel);
-                }
+                reverseByteDifferencing(buf, bufOffset, srcHeight, srcWidth * samplesPerPixel);
             } else if (bitsPerSample[0] == 16) {
-                if (byteOrder == ByteOrder.LITTLE_ENDIAN) {
-                    for (int j = 0; j < srcHeight; j++) {
-                        int count = dstOffset + samplesPerPixel * (j * srcWidth + 1) * 2;
-                        for (int i = samplesPerPixel; i < srcWidth * samplesPerPixel; i++) {
-                            int curr = (((int) buf[count]) & 0xFF) | (buf[count + 1] << 8);
-                            int prev = (((int) buf[count - samplesPerPixel * 2]) & 0xFF)
-                                    | (buf[count + 1 - samplesPerPixel * 2] << 8);
-                            curr += prev;
-                            buf[count] = (byte) curr;
-                            buf[count + 1] = (byte) (curr >> 8);
-                            count += 2;
-                        }
-                    }
-                } else {
-                    for (int j = 0; j < srcHeight; j++) {
-                        int count = dstOffset + samplesPerPixel * (j * srcWidth + 1) * 2;
-                        for (int i = samplesPerPixel; i < srcWidth * samplesPerPixel; i++) {
-                            int curr = (((int) buf[count + 1]) & 0xFF) | (buf[count] << 8);
-                            int prev = (((int) buf[count + 1 - samplesPerPixel * 2]) & 0xFF)
-                                    | (buf[count - samplesPerPixel * 2] << 8);
-                            curr += prev;
-                            buf[count + 1] = (byte) curr;
-                            buf[count] = (byte) (curr >> 8);
-                            count += 2;
-                        }
-                    }
-                }
+                reverseDifferencingShorts(
+                        buf, dstOffset, srcHeight, srcWidth * samplesPerPixel * 2, samplesPerPixel * 2);
             } else if (bitsPerSample[0] == 32) {
-                if (byteOrder == ByteOrder.LITTLE_ENDIAN) {
-                    for (int j = 0; j < srcHeight; j++) {
-                        int count = dstOffset + samplesPerPixel * (j * srcWidth + 1) * 4;
-                        for (int i = samplesPerPixel; i < srcWidth * samplesPerPixel; i++) {
-                            int prevBase = count - samplesPerPixel * 4;
-                            int prev = TIFFDecompressor.readIntegerFromBuffer(
-                                    buf, prevBase, prevBase + 1, prevBase + 2, prevBase + 3);
-                            int curr =
-                                    TIFFDecompressor.readIntegerFromBuffer(buf, count, count + 1, count + 2, count + 3);
-                            int sum = curr + prev;
-                            buf[count] = (byte) (sum & 0xFF);
-                            buf[count + 1] = (byte) ((sum >> 8) & 0xFF);
-                            buf[count + 2] = (byte) ((sum >> 16) & 0xFF);
-                            buf[count + 3] = (byte) ((sum >> 24) & 0xFF);
-                            count += 4;
-                        }
-                    }
-                } else {
-                    for (int j = 0; j < srcHeight; j++) {
-                        int count = dstOffset + samplesPerPixel * (j * srcWidth + 1) * 4;
-                        for (int i = samplesPerPixel; i < srcWidth * samplesPerPixel; i++) {
-                            int prevBase = count - samplesPerPixel * 4;
-                            int prev = TIFFDecompressor.readIntegerFromBuffer(
-                                    buf, prevBase + 3, prevBase + 2, prevBase + 1, prevBase);
-                            int curr =
-                                    TIFFDecompressor.readIntegerFromBuffer(buf, count + 3, count + 2, count + 1, count);
-                            int sum = curr + prev;
-                            buf[count + 3] = (byte) (sum & 0xFF);
-                            buf[count + 2] = (byte) (sum >> 8 & 0xFF);
-                            buf[count + 1] = (byte) (sum >> 16 & 0xFF);
-                            buf[count] = (byte) (sum >> 24 & 0xFF);
-                            count += 4;
-                        }
-                    }
-                }
+                reverseDifferencingInts(buf, dstOffset, srcHeight, srcWidth * samplesPerPixel * 4, samplesPerPixel * 4);
             } else if (bitsPerSample[0] == 64) {
-                if (byteOrder == ByteOrder.LITTLE_ENDIAN) {
-                    for (int j = 0; j < srcHeight; j++) {
-                        int count = dstOffset + samplesPerPixel * (j * srcWidth + 1) * 8;
-                        for (int i = samplesPerPixel; i < srcWidth * samplesPerPixel; i++) {
-                            int prevBase = count - samplesPerPixel * 8;
-                            long prev = TIFFDecompressor.readLongFromBuffer(
-                                    buf,
-                                    prevBase,
-                                    prevBase + 1,
-                                    prevBase + 2,
-                                    prevBase + 3,
-                                    prevBase + 4,
-                                    prevBase + 5,
-                                    prevBase + 6,
-                                    prevBase + 7);
-                            long curr = TIFFDecompressor.readLongFromBuffer(
-                                    buf, count, count + 1, count + 2, count + 3, count + 4, count + 5, count + 6,
-                                    count + 7);
-                            long sum = curr + prev;
-                            buf[count] = (byte) (sum & 0xFF);
-                            buf[count + 1] = (byte) ((sum >> 8) & 0xFF);
-                            buf[count + 2] = (byte) ((sum >> 16) & 0xFF);
-                            buf[count + 3] = (byte) ((sum >> 24) & 0xFF);
-                            buf[count + 4] = (byte) ((sum >> 32) & 0xFF);
-                            buf[count + 5] = (byte) ((sum >> 40) & 0xFF);
-                            buf[count + 6] = (byte) ((sum >> 48) & 0xFF);
-                            buf[count + 7] = (byte) ((sum >> 56) & 0xFF);
-                            count += 8;
-                        }
-                    }
-                } else {
-                    for (int j = 0; j < srcHeight; j++) {
-                        int count = dstOffset + samplesPerPixel * (j * srcWidth + 1) * 8;
-                        for (int i = samplesPerPixel; i < srcWidth * samplesPerPixel; i++) {
-                            int prevBase = count - samplesPerPixel * 8;
-                            long prev = TIFFDecompressor.readLongFromBuffer(
-                                    buf,
-                                    prevBase + 7,
-                                    prevBase + 6,
-                                    prevBase + 5,
-                                    prevBase + 4,
-                                    prevBase + 3,
-                                    prevBase + 2,
-                                    prevBase + 1,
-                                    prevBase);
-                            long curr = TIFFDecompressor.readLongFromBuffer(
-                                    buf, count + 7, count + 6, count + 5, count + 4, count + 3, count + 2, count + 1,
-                                    count);
-                            long sum = curr + prev;
-                            buf[count + 7] = (byte) (sum & 0xFF);
-                            buf[count + 6] = (byte) ((sum >> 8) & 0xFF);
-                            buf[count + 5] = (byte) ((sum >> 16) & 0xFF);
-                            buf[count + 4] = (byte) ((sum >> 24) & 0xFF);
-                            buf[count + 3] = (byte) ((sum >> 32) & 0xFF);
-                            buf[count + 2] = (byte) ((sum >> 40) & 0xFF);
-                            buf[count + 1] = (byte) ((sum >> 48) & 0xFF);
-                            buf[count] = (byte) ((sum >> 56) & 0xFF);
-                            count += 8;
-                        }
-                    }
-                }
+                reverseDifferencingLongs(
+                        buf, dstOffset, srcHeight, srcWidth * samplesPerPixel * 8, samplesPerPixel * 8);
             } else
                 throw new IIOException(
                         "Unexpected branch of Horizontal differencing Predictor, bps=" + bitsPerSample[0]);
@@ -199,34 +94,74 @@ public class PredictorDecompressor {
             int bytesPerSample = bitsPerSample[0] / 8;
             if (bytesPerRow % (bytesPerSample * samplesPerPixel) != 0) {
                 throw new IIOException("The number of bytes in a row (" + bytesPerRow + ") is not divisible"
-                        + "by the number of bytes per pixel (" + bytesPerSample * samplesPerPixel + ")");
+                        + " by the number of bytes per pixel (" + bytesPerSample * samplesPerPixel + ")");
             }
 
+            byte[] planes = new byte[bytesPerRow];
+            int samplesPerRow = srcWidth * samplesPerPixel;
             for (int j = 0; j < srcHeight; j++) {
                 int offset = bufOffset + j * bytesPerRow;
-                int count = offset + samplesPerPixel;
-                for (int i = samplesPerPixel; i < bytesPerRow; i++) {
-                    buf[count] += buf[count - samplesPerPixel];
-                    count++;
-                }
-
-                // Reorder the semi-BigEndian bytes.
-                byte[] tmp = Arrays.copyOfRange(buf, offset, offset + bytesPerRow);
-                int samplesPerRow = srcWidth * samplesPerPixel;
-                if (byteOrder == ByteOrder.BIG_ENDIAN) {
-                    for (int i = 0; i < samplesPerRow; i++) {
-                        for (int k = 0; k < bytesPerSample; k++) {
-                            buf[offset + i * bytesPerSample + k] = tmp[k * samplesPerRow + i];
-                        }
-                    }
-                } else {
-                    for (int i = 0; i < samplesPerRow; i++) {
-                        for (int k = 0; k < bytesPerSample; k++) {
-                            buf[offset + i * bytesPerSample + k] = tmp[(bytesPerSample - k - 1) * samplesPerRow + i];
-                        }
-                    }
-                }
+                reverseByteDifferencing(buf, offset, 1, bytesPerRow);
+                System.arraycopy(buf, offset, planes, 0, bytesPerRow);
+                interleavePlanes(planes, buf, offset, samplesPerRow, bytesPerSample);
             }
+        }
+    }
+
+    /** Reverses 8-bit differencing between the same band of consecutive pixels, used by both predictors. */
+    private void reverseByteDifferencing(byte[] buf, int offset, int rows, int rowBytes) {
+        if (samplesPerPixel == 1) {
+            reverseDifferencing(buf, offset, rows, rowBytes, samplesPerPixel);
+        } else if (samplesPerPixel == 2) {
+            reverseDifferencingTwoBands(buf, offset, rows, rowBytes, samplesPerPixel);
+        } else if (samplesPerPixel == 3) {
+            reverseDifferencingThreeBands(buf, offset, rows, rowBytes, samplesPerPixel);
+        } else if (samplesPerPixel == 4) {
+            reverseDifferencingFourBands(buf, offset, rows, rowBytes);
+        } else {
+            reverseDifferencingInterleaved(buf, offset, rows, rowBytes, samplesPerPixel);
+        }
+    }
+
+    /**
+     * Rebuilds the samples of one floating point predictor row from its byte planes. The planes hold the most
+     * significant byte of every sample first, then the next one, and so on (TIFF Technical Note 3). Each 2, 4 and 8
+     * byte sample is assembled as a value and stored with one write, other sizes byte by byte.
+     */
+    private void interleavePlanes(byte[] planes, byte[] buf, int offset, int n, int bytesPerSample) {
+        switch (bytesPerSample) {
+            case 2:
+                for (int i = 0; i < n; i++) {
+                    short v = (short) ((planes[i] << 8) | (planes[n + i] & 0xFF));
+                    SHORT_VIEW.set(buf, offset + i * 2, swap ? Short.reverseBytes(v) : v);
+                }
+                break;
+            case 4:
+                for (int i = 0; i < n; i++) {
+                    int v = (planes[i] << 24)
+                            | (planes[n + i] & 0xFF) << 16
+                            | (planes[2 * n + i] & 0xFF) << 8
+                            | (planes[3 * n + i] & 0xFF);
+                    INT_VIEW.set(buf, offset + i * 4, swap ? Integer.reverseBytes(v) : v);
+                }
+                break;
+            case 8:
+                for (int i = 0; i < n; i++) {
+                    long v = 0;
+                    for (int k = 0; k < 8; k++) {
+                        v = (v << 8) | (planes[k * n + i] & 0xFF);
+                    }
+                    LONG_VIEW.set(buf, offset + i * 8, swap ? Long.reverseBytes(v) : v);
+                }
+                break;
+            default:
+                boolean bigEndian = byteOrder == ByteOrder.BIG_ENDIAN;
+                for (int i = 0; i < n; i++) {
+                    for (int k = 0; k < bytesPerSample; k++) {
+                        int plane = bigEndian ? k : bytesPerSample - k - 1;
+                        buf[offset + i * bytesPerSample + k] = planes[plane * n + i];
+                    }
+                }
         }
     }
 
@@ -275,6 +210,123 @@ public class PredictorDecompressor {
         }
     }
 
+    /**
+     * Reverses 8-bit horizontal differencing on three band rows, in place, a whole pixel per step with one running sum
+     * per band in a local. stride is always 3, taken as an argument for the same reason as in
+     * {@link #reverseDifferencing}.
+     */
+    private static void reverseDifferencingThreeBands(
+            byte[] buf, int bufOffset, int srcHeight, int rowSamples, int stride) {
+        for (int j = 0; j < srcHeight; j++) {
+            final int rowStart = bufOffset + j * rowSamples;
+            final int rowEnd = rowStart + rowSamples;
+            byte b0 = buf[rowStart];
+            byte b1 = buf[rowStart + 1];
+            byte b2 = buf[rowStart + 2];
+            for (int p = rowStart + stride; p < rowEnd; p += stride) {
+                b0 += buf[p];
+                b1 += buf[p + 1];
+                b2 += buf[p + 2];
+                buf[p] = b0;
+                buf[p + 1] = b1;
+                buf[p + 2] = b2;
+            }
+        }
+    }
+
+    /**
+     * Reverses 8-bit horizontal differencing on four band interleaved rows, in place, a whole pixel per step. The pixel
+     * is read as an int and added byte by byte with no carry between bytes, so the four band sums take one int add.
+     * Byte order does not matter, as every byte is summed on its own.
+     */
+    private static void reverseDifferencingFourBands(byte[] buf, int bufOffset, int srcHeight, int rowSamples) {
+        for (int j = 0; j < srcHeight; j++) {
+            final int rowStart = bufOffset + j * rowSamples;
+            final int rowEnd = rowStart + rowSamples;
+            int acc = (int) INT_VIEW.get(buf, rowStart);
+            for (int p = rowStart + 4; p < rowEnd; p += 4) {
+                int v = (int) INT_VIEW.get(buf, p);
+                // low 7 bits of each byte add without leaving the byte, the top bit is the xor of the two top bits
+                acc = ((acc & 0x7F7F7F7F) + (v & 0x7F7F7F7F)) ^ ((acc ^ v) & 0x80808080);
+                INT_VIEW.set(buf, p, acc);
+            }
+        }
+    }
+
+    /**
+     * Reverses 8-bit horizontal differencing on two band rows, as {@link #reverseDifferencingFourBands} on a short.
+     * stride is always 2, taken as an argument for the same reason as in {@link #reverseDifferencing}: with a literal 2
+     * the loop measured five times slower.
+     */
+    private static void reverseDifferencingTwoBands(
+            byte[] buf, int bufOffset, int srcHeight, int rowSamples, int stride) {
+        for (int j = 0; j < srcHeight; j++) {
+            final int rowStart = bufOffset + j * rowSamples;
+            final int rowEnd = rowStart + rowSamples;
+            short acc = (short) SHORT_VIEW.get(buf, rowStart);
+            for (int p = rowStart + stride; p < rowEnd; p += stride) {
+                short v = (short) SHORT_VIEW.get(buf, p);
+                acc = (short) (((acc & 0x7F7F) + (v & 0x7F7F)) ^ ((acc ^ v) & 0x8080));
+                SHORT_VIEW.set(buf, p, acc);
+            }
+        }
+    }
+
+    /**
+     * Reverses 16-bit horizontal differencing in place, one band at a time with its running sum in a local. Reading the
+     * previous sample back from the array, as {@link #reverseDifferencingInts} does, measured from 6 to 95 ms on the
+     * same input depending on the JIT's choices. With {@link #swap}, samples are reversed to their value before the add
+     * and back before the write.
+     */
+    private void reverseDifferencingShorts(byte[] buf, int offset, int rows, int rowBytes, int pixelBytes) {
+        for (int j = 0; j < rows; j++) {
+            int rowStart = offset + j * rowBytes;
+            int rowEnd = rowStart + rowBytes;
+            for (int band = rowStart; band < rowStart + pixelBytes; band += 2) {
+                short first = (short) SHORT_VIEW.get(buf, band);
+                short acc = swap ? Short.reverseBytes(first) : first;
+                for (int p = band + pixelBytes; p < rowEnd; p += pixelBytes) {
+                    short curr = (short) SHORT_VIEW.get(buf, p);
+                    acc += swap ? Short.reverseBytes(curr) : curr;
+                    SHORT_VIEW.set(buf, p, swap ? Short.reverseBytes(acc) : acc);
+                }
+            }
+        }
+    }
+
+    /**
+     * Reverses 32-bit horizontal differencing in place. With {@link #swap}, samples are reversed to their value before
+     * the add and back after it.
+     */
+    private void reverseDifferencingInts(byte[] buf, int offset, int rows, int rowBytes, int pixelBytes) {
+        for (int j = 0; j < rows; j++) {
+            int rowStart = offset + j * rowBytes;
+            int rowEnd = rowStart + rowBytes;
+            for (int p = rowStart + pixelBytes; p < rowEnd; p += 4) {
+                int prev = (int) INT_VIEW.get(buf, p - pixelBytes);
+                int curr = (int) INT_VIEW.get(buf, p);
+                int sum = swap
+                        ? Integer.reverseBytes(Integer.reverseBytes(prev) + Integer.reverseBytes(curr))
+                        : prev + curr;
+                INT_VIEW.set(buf, p, sum);
+            }
+        }
+    }
+
+    /** Reverses 64-bit horizontal differencing in place, as {@link #reverseDifferencingInts}. */
+    private void reverseDifferencingLongs(byte[] buf, int offset, int rows, int rowBytes, int pixelBytes) {
+        for (int j = 0; j < rows; j++) {
+            int rowStart = offset + j * rowBytes;
+            int rowEnd = rowStart + rowBytes;
+            for (int p = rowStart + pixelBytes; p < rowEnd; p += 8) {
+                long prev = (long) LONG_VIEW.get(buf, p - pixelBytes);
+                long curr = (long) LONG_VIEW.get(buf, p);
+                long sum = swap ? Long.reverseBytes(Long.reverseBytes(prev) + Long.reverseBytes(curr)) : prev + curr;
+                LONG_VIEW.set(buf, p, sum);
+            }
+        }
+    }
+
     /** Validate the current predictor setup */
     public void validate() throws IIOException {
         // Check bitsPerSample.
@@ -309,7 +361,7 @@ public class PredictorDecompressor {
             }
             for (int sf : sampleFormat) {
                 if (sf != BaselineTIFFTagSet.SAMPLE_FORMAT_FLOATING_POINT) {
-                    throw new IIOException("Floating point Predictor not supported" + "with " + sf + " data format");
+                    throw new IIOException("Floating point Predictor not supported with " + sf + " data format");
                 }
             }
         }

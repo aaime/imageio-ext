@@ -58,13 +58,13 @@ import org.openjdk.jmh.runner.options.OptionsBuilder;
  * 370 with OpenJDK 17, ms/op, reference vs stridedPerBand vs current (reference, strided, current):
  *
  * <ul>
- *   <li>1 band: 199.9 +- 69.9 vs 71.7 +- 2.2 vs 22.3 +- 0.4, so 240, 669 and 2155 MB/s
- *   <li>2 bands: 158.1 +- 72.6 vs 70.9 +- 0.8 vs 32.2 +- 1.3, so 304, 677 and 1489 MB/s
- *   <li>3 bands: 154.7 +- 71.1 vs 72.0 +- 2.6 vs 37.8 +- 0.4, so 310, 667 and 1270 MB/s
- *   <li>4 bands: 174.7 +- 23.2 vs 70.9 +- 0.6 vs 37.4 +- 1.5, so 275, 677 and 1283 MB/s
+ *   <li>1 band: 233.8 +- 41.9 vs 97.5 +- 24.3 vs 25.9 +- 8.1, so 205, 492 and 1853 MB/s
+ *   <li>2 bands: 213.9 +- 19.5 vs 107.0 +- 0.2 vs 28.5 +- 5.6, so 224, 449 and 1683 MB/s
+ *   <li>3 bands: 161.8 +- 1.3 vs 107.0 +- 1.5 vs 34.6 +- 0.4, so 297, 449 and 1387 MB/s
+ *   <li>4 bands: 235.2 +- 53.3 vs 77.4 +- 23.1 vs 9.6 +- 3.1, so 204, 620 and 4980 MB/s
  * </ul>
  *
- * <p>The reference scores are the unstable ones, up to 46% error against under 4% for the other two.
+ * <p>The error reaches 32% of the score on some arms, so compare scores only within one run.
  */
 @State(Scope.Benchmark)
 @BenchmarkMode(Mode.AverageTime)

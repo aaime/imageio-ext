@@ -819,6 +819,24 @@ public class TIFFReadTest extends Assert {
     }
 
     @Test
+    public void readThreeBandPredictor2() throws IOException {
+        // These images have been created from sampleRGBA.tif using the commands:
+        // gdal_translate -b 1 -b 2 -b 3 sampleRGBA.tif sampleRGB.tif
+        // gdal_translate -b 1 -b 2 -b 3 -co TILED=YES -co BLOCKXSIZE=16 -co BLOCKYSIZE=16
+        //                -co COMPRESS=DEFLATE -co PREDICTOR=2 sampleRGBA.tif sampleRGB_DEFLATE_p2.tif
+        assertImagesEqual(readTiff("sampleRGB.tif"), readTiff("sampleRGB_DEFLATE_p2.tif"));
+    }
+
+    @Test
+    public void readTwoBandPredictor2() throws IOException {
+        // These images have been created from sampleRGBA.tif using the commands:
+        // gdal_translate -b 1 -b 4 sampleRGBA.tif sampleGA.tif
+        // gdal_translate -b 1 -b 4 -co TILED=YES -co BLOCKXSIZE=16 -co BLOCKYSIZE=16
+        //                -co COMPRESS=DEFLATE -co PREDICTOR=2 sampleRGBA.tif sampleGA_DEFLATE_p2.tif
+        assertImagesEqual(readTiff("sampleGA.tif"), readTiff("sampleGA_DEFLATE_p2.tif"));
+    }
+
+    @Test
     public void readMultiBandInt16Predictor2() throws IOException {
         assertImagesEqual(readTiff("sampleRGBA.tif"), readTiff("sampleRGBA16_LZW_p2.tif"));
         assertImagesEqual(readTiff("sampleRGBA.tif"), readTiff("sampleRGBA16_DEFLATE_p2.tif"));
