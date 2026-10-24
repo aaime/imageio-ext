@@ -112,7 +112,7 @@ public class PredictorDecompressorBenchmark {
 
     @Benchmark
     public byte[] current() throws Exception {
-        decompressor.decompress(buf, 0, 0, height, width, width * samplesPerPixel);
+        decompressor.decompress(buf, 0, height, width, width * samplesPerPixel);
         return buf;
     }
 

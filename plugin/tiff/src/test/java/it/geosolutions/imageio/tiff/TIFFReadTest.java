@@ -652,6 +652,27 @@ public class TIFFReadTest extends Assert {
     }
 
     @Test
+    public void readPredictor2On8BitsStrips() throws IOException {
+        // These images have been created from test.tif using the command:
+        // gdal_translate -co COMPRESS=<LZW|DEFLATE|ZSTD> -co PREDICTOR=2 -co BLOCKYSIZE=4 test.tif <name>
+        // Every strip after the first is decoded at a non-zero offset in the destination raster
+        assertImagesEqual(readTiff("test.tif"), readTiff("lzw8_p2_strips.tif"));
+        assertImagesEqual(readTiff("test.tif"), readTiff("deflate8_p2_strips.tif"));
+        assertImagesEqual(readTiff("test.tif"), readTiff("zstd8_p2_strips.tif"));
+    }
+
+    @Test
+    public void readPredictor2On8BitsTiles() throws IOException {
+        // These images have been created from test.tif using the command:
+        // gdal_translate -co COMPRESS=<LZW|DEFLATE|ZSTD> -co PREDICTOR=2 -co TILED=YES -co BLOCKXSIZE=16
+        //                -co BLOCKYSIZE=16 test.tif <name>
+        // Tiles are narrower than the image, so each is decoded in a separate buffer and then copied
+        assertImagesEqual(readTiff("test.tif"), readTiff("lzw8_p2_tiles.tif"));
+        assertImagesEqual(readTiff("test.tif"), readTiff("deflate8_p2_tiles.tif"));
+        assertImagesEqual(readTiff("test.tif"), readTiff("zstd8_p2_tiles.tif"));
+    }
+
+    @Test
     public void readLZWWithHorizontalDifferencingPredictorOn16Bits() throws IOException {
         // This image has been created from test.tif using the command:
         // gdal_translate -OT UInt16 -co COMPRESS=LZW -co PREDICTOR=2 test.tif lzwtest.tif

@@ -65,7 +65,7 @@ public class TIFFZSTDDecompressor extends TIFFDecompressor {
         }
 
         zstdDecompressor.decompress(srcData, 0, byteCount, buf, bufOffset, bytesPerRow * srcHeight);
-        predictorDecompressor.decompress(buf, bufOffset, dstOffset, srcHeight, srcWidth, bytesPerRow);
+        predictorDecompressor.decompress(buf, bufOffset, srcHeight, srcWidth, bytesPerRow);
 
         if (bytesPerRow != scanlineStride) {
             int off = 0;

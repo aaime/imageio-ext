@@ -109,7 +109,7 @@ public class PredictorDecompressorMultiByteBenchmark {
 
     @Benchmark
     public byte[] decode() throws Exception {
-        decompressor.decompress(buf, 0, 0, height, width, rowBytes);
+        decompressor.decompress(buf, 0, height, width, rowBytes);
         return buf;
     }
 

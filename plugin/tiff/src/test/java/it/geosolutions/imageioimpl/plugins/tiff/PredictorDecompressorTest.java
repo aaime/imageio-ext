@@ -87,7 +87,7 @@ public class PredictorDecompressorTest {
                     expected[spp + band] = (byte) sum[2];
 
                     decoder(BaselineTIFFTagSet.PREDICTOR_HORIZONTAL_DIFFERENCING, 1, spp, ByteOrder.LITTLE_ENDIAN)
-                            .decompress(row, 0, 0, 1, 2, row.length);
+                            .decompress(row, 0, 1, 2, row.length);
 
                     String where = String.format("spp=%d band=%d 0x%X+0x%X", spp, band, sum[0], sum[1]);
                     assertArrayEquals(where, expected, row);
@@ -146,7 +146,7 @@ public class PredictorDecompressorTest {
     public void testFloatingPointRowLength() throws Exception {
         PredictorDecompressor pd = decoder(BaselineTIFFTagSet.PREDICTOR_FLOATING_POINT, 4, 1, ByteOrder.LITTLE_ENDIAN);
         pd.validate();
-        IIOException e = assertThrows(IIOException.class, () -> pd.decompress(new byte[6], 0, 0, 1, 1, 6));
+        IIOException e = assertThrows(IIOException.class, () -> pd.decompress(new byte[6], 0, 1, 1, 6));
         assertEquals(
                 "The number of bytes in a row (6) is not divisible by the number of bytes per pixel (4)",
                 e.getMessage());
@@ -179,7 +179,7 @@ public class PredictorDecompressorTest {
                         }
                     }
 
-                    decoder(predictor, bytes, spp, order).decompress(encoded, PADDING, PADDING, h, w, rowBytes);
+                    decoder(predictor, bytes, spp, order).decompress(encoded, PADDING, h, w, rowBytes);
 
                     String where = "predictor=" + predictor + " bytes=" + bytes + " spp=" + spp + " order=" + order
                             + " w=" + w + " h=" + h;
@@ -286,7 +286,7 @@ public class PredictorDecompressorTest {
                             spp,
                             ByteOrder.LITTLE_ENDIAN);
                     try {
-                        pd.decompress(actual, 0, 0, h, w, w * spp);
+                        pd.decompress(actual, 0, h, w, w * spp);
                     } catch (Exception e) {
                         throw new AssertionError("decompress threw for spp=" + spp + " w=" + w + " h=" + h, e);
                     }

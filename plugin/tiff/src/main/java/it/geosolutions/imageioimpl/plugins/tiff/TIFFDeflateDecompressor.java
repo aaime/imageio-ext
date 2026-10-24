@@ -136,7 +136,7 @@ public class TIFFDeflateDecompressor extends TIFFDecompressor {
         } finally {
             deflateDecompressor.done();
         }
-        predictorDecompressor.decompress(buf, bufOffset, dstOffset, srcHeight, srcWidth, bytesPerRow);
+        predictorDecompressor.decompress(buf, bufOffset, srcHeight, srcWidth, bytesPerRow);
 
         if (bytesPerRow != scanlineStride) {
             if (DEBUG) {

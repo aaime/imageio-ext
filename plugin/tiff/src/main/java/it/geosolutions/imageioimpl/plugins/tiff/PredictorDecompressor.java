@@ -73,20 +73,20 @@ public class PredictorDecompressor {
         this.swap = byteOrder != ByteOrder.nativeOrder();
     }
 
-    /** Decompress the buffer content by applying the proper predictor algorithm */
-    public void decompress(byte[] buf, int bufOffset, int dstOffset, int srcHeight, int srcWidth, int bytesPerRow)
+    /** Reverses the predictor in place on srcHeight rows of bytesPerRow bytes, starting at bufOffset in buf. */
+    public void decompress(byte[] buf, int bufOffset, int srcHeight, int srcWidth, int bytesPerRow)
             throws IIOException {
         if (predictor == BaselineTIFFTagSet.PREDICTOR_HORIZONTAL_DIFFERENCING) {
             if (bitsPerSample[0] == 8) {
                 reverseByteDifferencing(buf, bufOffset, srcHeight, srcWidth * samplesPerPixel);
             } else if (bitsPerSample[0] == 16) {
                 reverseDifferencingShorts(
-                        buf, dstOffset, srcHeight, srcWidth * samplesPerPixel * 2, samplesPerPixel * 2);
+                        buf, bufOffset, srcHeight, srcWidth * samplesPerPixel * 2, samplesPerPixel * 2);
             } else if (bitsPerSample[0] == 32) {
-                reverseDifferencingInts(buf, dstOffset, srcHeight, srcWidth * samplesPerPixel * 4, samplesPerPixel * 4);
+                reverseDifferencingInts(buf, bufOffset, srcHeight, srcWidth * samplesPerPixel * 4, samplesPerPixel * 4);
             } else if (bitsPerSample[0] == 64) {
                 reverseDifferencingLongs(
-                        buf, dstOffset, srcHeight, srcWidth * samplesPerPixel * 8, samplesPerPixel * 8);
+                        buf, bufOffset, srcHeight, srcWidth * samplesPerPixel * 8, samplesPerPixel * 8);
             } else
                 throw new IIOException(
                         "Unexpected branch of Horizontal differencing Predictor, bps=" + bitsPerSample[0]);
